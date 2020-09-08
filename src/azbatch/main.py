@@ -12,6 +12,9 @@ import click
 from azbatch.utils import query_yes_no, print_batch_exception, wait_for_tasks_to_complete, print_task_output, \
     upload_file_to_container
 
+NEO_IMAGE = "ada510.azurecr.io/neo:merged-python"
+# NEO_IMAGE = "ada510.azurecr.io/neo:nvidia"  # doesn't help
+
 
 def create_container_config(config):
     ada_cr = batchmodels.ContainerRegistry(
@@ -20,7 +23,7 @@ def create_container_config(config):
         password=config["CR_PASSWORD"],
     )
     return batchmodels.ContainerConfiguration(
-        container_image_names=["ada510.azurecr.io/neo:merged-python"],
+        container_image_names=[NEO_IMAGE],
         container_registries=[ada_cr],
     )
 
@@ -75,7 +78,6 @@ def create_job(batch_service_client, config):
     job = batch.models.JobAddParameter(
         id=config['JOB_ID'], pool_info=batch.models.PoolInformation(pool_id=config['POOL_ID'])
     )
-
     batch_service_client.job.add(job)
 
 
@@ -92,20 +94,34 @@ def add_tasks(batch_service_client, config):
     print("Adding tasks to job [{}]...".format(config['JOB_ID']))
 
     task_container_settings = batchmodels.TaskContainerSettings(
-        image_name="ada510.azurecr.io/neo:merged-python",
-        container_run_options='--rm --workdir /'
+        image_name=NEO_IMAGE,
+        container_run_options='--rm --workdir /ada_tools'
+    )
+    admin_identity = batchmodels.UserIdentity(
+        auto_user=batchmodels.AutoUserSpecification(
+            scope='pool',
+            elevation_level='admin',
+        )
     )
 
     tasks = [
         batchmodels.TaskAddParameter(
+            id='00-info',
+            command_line="neo info",
+            container_settings=task_container_settings,
+            user_identity=admin_identity,
+        ),
+        batchmodels.TaskAddParameter(
             id='01-load-images',
             command_line="load-images --dest /ada --maxpre 1 --maxpost 1",
-            container_settings=task_container_settings
+            container_settings=task_container_settings,
+            user_identity=admin_identity,
         ),
         batchmodels.TaskAddParameter(
             id='02-check-images',
             command_line="ls /ada",
-            container_settings=task_container_settings
+            container_settings=task_container_settings,
+            user_identity=admin_identity,
         ),
     ]
     batch_service_client.task.add_collection(config['JOB_ID'], tasks)
