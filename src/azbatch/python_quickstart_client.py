@@ -96,7 +96,13 @@ def add_tasks(batch_service_client, input_files, config):
     batch_service_client.task.add_collection(config['JOB_ID'], tasks)
 
 
-def deploy(pool_id=None, pool_node_count=None, pool_vm_size=None, job_id=None, std_out_fname=None):
+@click.command()
+@click.argument("pool-id")
+@click.option("--job-id", "-j")
+@click.option("--pool-node-count")
+@click.option("--pool-vm-size")
+@click.option("--std-out-fname")
+def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, std_out_fname=None):
     config = {
         "POOL_ID": pool_id or "PythonQuickstartPool2",
         "POOL_NODE_COUNT": pool_node_count or 2,
@@ -174,7 +180,7 @@ def deploy(pool_id=None, pool_node_count=None, pool_vm_size=None, job_id=None, s
         )
 
         # Print the stdout.txt and stderr.txt files for each task to the console
-        print_task_output(batch_client, config['JOB_ID'])
+        print_task_output(batch_client, config['JOB_ID'], config['STANDARD_OUT_FILE_NAME'])
 
     except batchmodels.BatchErrorException as err:
         print_batch_exception(err)
