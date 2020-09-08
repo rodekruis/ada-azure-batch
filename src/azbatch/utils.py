@@ -140,13 +140,16 @@ def print_task_output(batch_service_client, job_id, stdout_name, encoding=None):
         print("Task: {}".format(task.id))
         print("Node: {}".format(node_id))
 
-        stream = batch_service_client.file.get_from_task(
-            job_id, task.id, stdout_name
-        )
+        try:
+            stream = batch_service_client.file.get_from_task(
+                job_id, task.id, stdout_name
+            )
 
-        file_text = _read_stream_as_string(stream, encoding)
-        print("Standard output:")
-        print(file_text)
+            file_text = _read_stream_as_string(stream, encoding)
+            print("Standard output:")
+            print(file_text)
+        except batchmodels.BatchErrorException as e:
+            print('Error occured:', e)
 
 
 def _read_stream_as_string(stream, encoding):
