@@ -12,7 +12,7 @@ setup(
     description="",
     extras_require={"dev": dev_packages},
     entry_points={
-        "console_scripts": ["deploy-batch = azbatch.python_quickstart_client:deploy"]
+        "console_scripts": ["deploy-batch = azbatch.main:deploy"]
     },
     # author="Ondrej",
     long_description_content_type="text/markdown",

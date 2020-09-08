@@ -13,6 +13,18 @@ from azbatch.utils import query_yes_no, print_batch_exception, wait_for_tasks_to
     upload_file_to_container
 
 
+def create_container_config(config):
+    ada_cr = batchmodels.ContainerRegistry(
+        registry_server="ada510.azurecr.io",
+        user_name="ada510",
+        password=config["CR_PASSWORD"],
+    )
+    return batchmodels.ContainerConfiguration(
+        container_image_names=["ada510.azurecr.io/neo:merged-python"],
+        container_registries=[ada_cr],
+    )
+
+
 def create_pool(batch_service_client, config):
     """
     Creates a pool of compute nodes with the specified OS settings.
@@ -41,9 +53,10 @@ def create_pool(batch_service_client, config):
                 version="latest",
             ),
             node_agent_sku_id="batch.node.ubuntu 16.04",
+            container_configuration=create_container_config(config),
         ),
-        vm_size='STANDARD_D1_V2', # XXX  config['POOL_VM_SIZE'],
-        target_dedicated_nodes=1, # XXX config['POOL_NODE_COUNT'],
+        vm_size=config['POOL_VM_SIZE'],
+        target_dedicated_nodes=config['POOL_NODE_COUNT'],
     )
     batch_service_client.pool.add(new_pool)
 
@@ -66,7 +79,7 @@ def create_job(batch_service_client, config):
     batch_service_client.job.add(job)
 
 
-def add_tasks(batch_service_client, input_files, config):
+def add_tasks(batch_service_client, config):
     """
     Adds a task for each input file in the collection to the specified job.
 
@@ -74,25 +87,27 @@ def add_tasks(batch_service_client, input_files, config):
     :type batch_service_client: `azure.batch.BatchServiceClient`
     :param list input_files: A collection of input files. One task will be
      created for each input file.
-    :param output_container_sas_token: A SAS token granting write access to
-    the specified Azure Blob storage container.
+    :param config: Config
     """
+    print("Adding tasks to job [{}]...".format(config['JOB_ID']))
 
-    print("Adding {} tasks to job [{}]...".format(len(input_files), config['JOB_ID']))
+    task_container_settings = batchmodels.TaskContainerSettings(
+        image_name="ada510.azurecr.io/neo/neo:merged-python",
+        container_run_options='--rm --workdir /'
+    )
 
-    tasks = list()
-
-    for idx, input_file in enumerate(input_files):
-
-        command = '/bin/bash -c "cat {}"'.format(input_file.file_path)
-        tasks.append(
-            batch.models.TaskAddParameter(
-                id="Task{}".format(idx),
-                command_line=command,
-                resource_files=[input_file],
-            )
-        )
-
+    tasks = [
+        batchmodels.TaskAddParameter(
+            id='01-load-images',
+            command_line="load-images --dest /ada --maxpre 1 --maxpost 1",
+            container_settings=task_container_settings
+        ),
+        batchmodels.TaskAddParameter(
+            id='02-check-images',
+            command_line="ls /ada",
+            container_settings=task_container_settings
+        ),
+    ]
     batch_service_client.task.add_collection(config['JOB_ID'], tasks)
 
 
@@ -105,9 +120,9 @@ def add_tasks(batch_service_client, input_files, config):
 def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, std_out_fname=None):
     config = {
         "POOL_ID": pool_id or "PythonQuickstartPool2",
-        "POOL_NODE_COUNT": pool_node_count or 2,
-        "POOL_VM_SIZE": pool_vm_size or "STANDARD_A1_v2",
         "JOB_ID": job_id or "PythonQuickstartJob2",
+        "POOL_NODE_COUNT": pool_node_count or 1,
+        "POOL_VM_SIZE": pool_vm_size or "STANDARD_D1_V2",
         "STANDARD_OUT_FILE_NAME": std_out_fname or "stdout.txt",
 
         "BATCH_ACCOUNT_NAME": os.environ.get("_BATCH_ACCOUNT_NAME"),
@@ -115,45 +130,18 @@ def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, s
         "BATCH_ACCOUNT_URL": os.environ.get("_BATCH_ACCOUNT_URL"),
         "STORAGE_ACCOUNT_NAME": os.environ.get("_STORAGE_ACCOUNT_NAME"),
         "STORAGE_ACCOUNT_KEY": os.environ.get("_STORAGE_ACCOUNT_KEY"),
+        "CR_PASSWORD": os.environ.get("_CR_PASSWORD"),
     }
-
+    print(config['BATCH_ACCOUNT_NAME'])
     start_time = datetime.datetime.now().replace(microsecond=0)
     print("Sample start: {}".format(start_time))
     print()
-
-    # Create the blob client, for use in obtaining references to
-    # blob storage containers and uploading files to containers.
-
-    blob_client = azureblob.BlockBlobService(
-        account_name=config["STORAGE_ACCOUNT_NAME"],
-        account_key=config["STORAGE_ACCOUNT_KEY"],
-    )
-
-    # Use the blob client to create the containers in Azure Storage if they
-    # don't yet exist.
-
-    input_container_name = "input"
-    blob_client.create_container(input_container_name, fail_on_exist=False)
-
-    # The collection of data files that are to be processed by the tasks.
-    input_file_paths = [
-        os.path.join(sys.path[0], "taskdata0.txt"),
-        os.path.join(sys.path[0], "taskdata1.txt"),
-        os.path.join(sys.path[0], "taskdata2.txt"),
-    ]
-
-    # Upload the data files.
-    input_files = [
-        upload_file_to_container(blob_client, input_container_name, file_path)
-        for file_path in input_file_paths
-    ]
 
     # Create a Batch service client. We'll now be interacting with the Batch
     # service in addition to Storage
     credentials = batch_auth.SharedKeyCredentials(
         config["BATCH_ACCOUNT_NAME"], config["BATCH_ACCOUNT_KEY"]
     )
-
     batch_client = batch.BatchServiceClient(
         credentials, batch_url=config["BATCH_ACCOUNT_URL"]
     )
@@ -167,7 +155,7 @@ def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, s
         create_job(batch_client, config)
 
         # Add the tasks to the job.
-        add_tasks(batch_client, input_files, config)
+        add_tasks(batch_client, config)
 
         # Pause execution until tasks reach Completed state.
         wait_for_tasks_to_complete(
@@ -185,10 +173,6 @@ def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, s
     except batchmodels.BatchErrorException as err:
         print_batch_exception(err)
         raise
-
-    # Clean up storage resources
-    print("Deleting container [{}]...".format(input_container_name))
-    blob_client.delete_container(input_container_name)
 
     # Print out some timing info
     end_time = datetime.datetime.now().replace(microsecond=0)
