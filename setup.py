@@ -11,7 +11,9 @@ setup(
     install_requires=open("requirements.txt").readlines(),
     description="",
     extras_require={"dev": dev_packages},
-    entry_points={"console_scripts": ["deploy-batch = azbatch.python_quickstart_client:deploy"]},
+    entry_points={
+        "console_scripts": ["deploy-batch = azbatch.python_quickstart_client:deploy"]
+    },
     # author="Ondrej",
     long_description_content_type="text/markdown",
 )

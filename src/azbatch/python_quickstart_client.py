@@ -1,57 +1,15 @@
-from __future__ import print_function
 import datetime
 import os
 import sys
-
-from azbatch import config
-from azbatch.utils import (
-    query_yes_no,
-    print_batch_exception,
-    wait_for_tasks_to_complete,
-    print_task_output,
-)
 
 import azure.storage.blob as azureblob
 import azure.batch.batch_service_client as batch
 import azure.batch.batch_auth as batch_auth
 import azure.batch.models as batchmodels
 
-
-# Update the Batch and Storage account credential strings in config.py with values
-# unique to your accounts. These are used when constructing connection strings
-# for the Batch and Storage client objects.
-
-
-def upload_file_to_container(block_blob_client, container_name, file_path):
-    """
-    Uploads a local file to an Azure Blob storage container.
-
-    :param block_blob_client: A blob service client.
-    :type block_blob_client: `azure.storage.blob.BlockBlobService`
-    :param str container_name: The name of the Azure Blob storage container.
-    :param str file_path: The local path to the file.
-    :rtype: `azure.batch.models.ResourceFile`
-    :return: A ResourceFile initialized with a SAS URL appropriate for Batch
-    tasks.
-    """
-    blob_name = os.path.basename(file_path)
-
-    print("Uploading file {} to container [{}]...".format(file_path, container_name))
-
-    block_blob_client.create_blob_from_path(container_name, blob_name, file_path)
-
-    sas_token = block_blob_client.generate_blob_shared_access_signature(
-        container_name,
-        blob_name,
-        permission=azureblob.BlobPermissions.READ,
-        expiry=datetime.datetime.utcnow() + datetime.timedelta(hours=2),
-    )
-
-    sas_url = block_blob_client.make_blob_url(
-        container_name, blob_name, sas_token=sas_token
-    )
-
-    return batchmodels.ResourceFile(http_url=sas_url, file_path=blob_name)
+from azbatch import config
+from azbatch.utils import query_yes_no, print_batch_exception, wait_for_tasks_to_complete, print_task_output, \
+    upload_file_to_container
 
 
 def create_pool(batch_service_client, pool_id):
@@ -77,9 +35,9 @@ def create_pool(batch_service_client, pool_id):
         id=pool_id,
         virtual_machine_configuration=batchmodels.VirtualMachineConfiguration(
             image_reference=batchmodels.ImageReference(
-                publisher="Canonical",
-                offer="UbuntuServer",
-                sku="18.04-LTS",
+                publisher="microsoft-azure-batch",
+                offer="ubuntu-server-container",
+                sku='18-04-lts',
                 version="latest",
             ),
             node_agent_sku_id="batch.node.ubuntu 18.04",
@@ -160,9 +118,9 @@ def deploy():
 
     # The collection of data files that are to be processed by the tasks.
     input_file_paths = [
-        os.path.join("/Users/ondrej/Downloads/batch-python-quickstart/src/azbatch/taskdata0.txt"),
-        os.path.join("/Users/ondrej/Downloads/batch-python-quickstart/src/azbatch/taskdata1.txt"),
-        os.path.join("/Users/ondrej/Downloads/batch-python-quickstart/src/azbatch/taskdata2.txt"),
+        os.path.join(sys.path[0], "taskdata0.txt"),
+        os.path.join(sys.path[0], "taskdata1.txt"),
+        os.path.join(sys.path[0], "taskdata2.txt"),
     ]
 
     # Upload the data files.
@@ -232,6 +190,5 @@ def deploy():
 
 
 if __name__ == "__main__":
-    sys.path.append('.')
-    sys.path.append('..')
+    print(os.environ.get("_BATCH_ACCOUNT_NAME"))
     deploy()
