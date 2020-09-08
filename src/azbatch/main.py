@@ -92,7 +92,7 @@ def add_tasks(batch_service_client, config):
     print("Adding tasks to job [{}]...".format(config['JOB_ID']))
 
     task_container_settings = batchmodels.TaskContainerSettings(
-        image_name="ada510.azurecr.io/neo/neo:merged-python",
+        image_name="ada510.azurecr.io/neo:merged-python",
         container_run_options='--rm --workdir /'
     )
 
