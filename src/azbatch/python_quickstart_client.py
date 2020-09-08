@@ -7,12 +7,13 @@ import azure.batch.batch_service_client as batch
 import azure.batch.batch_auth as batch_auth
 import azure.batch.models as batchmodels
 
-from azbatch import config
+import click
+
 from azbatch.utils import query_yes_no, print_batch_exception, wait_for_tasks_to_complete, print_task_output, \
     upload_file_to_container
 
 
-def create_pool(batch_service_client, pool_id):
+def create_pool(batch_service_client, config):
     """
     Creates a pool of compute nodes with the specified OS settings.
 
@@ -23,32 +24,31 @@ def create_pool(batch_service_client, pool_id):
     :param str offer: Marketplace image offer
     :param str sku: Marketplace image sku
     """
-    print("Creating pool [{}]...".format(pool_id))
+    print("Creating pool [{}]...".format(config['POOL_ID']))
 
     # Create a new pool of Linux compute nodes using an Azure Virtual Machines
     # Marketplace image. For more information about creating pools of Linux
     # nodes, see:
     # https://azure.microsoft.com/documentation/articles/batch-linux-nodes/
-    print(config._POOL_VM_SIZE, config._POOL_NODE_COUNT)
 
     new_pool = batch.models.PoolAddParameter(
-        id=pool_id,
+        id=config['POOL_ID'],
         virtual_machine_configuration=batchmodels.VirtualMachineConfiguration(
             image_reference=batchmodels.ImageReference(
                 publisher="microsoft-azure-batch",
                 offer="ubuntu-server-container",
-                sku='18-04-lts',
+                sku='16-04-lts',
                 version="latest",
             ),
-            node_agent_sku_id="batch.node.ubuntu 18.04",
+            node_agent_sku_id="batch.node.ubuntu 16.04",
         ),
-        vm_size=config._POOL_VM_SIZE,
-        target_dedicated_nodes=config._POOL_NODE_COUNT,
+        vm_size='STANDARD_D1_V2', # XXX  config['POOL_VM_SIZE'],
+        target_dedicated_nodes=1, # XXX config['POOL_NODE_COUNT'],
     )
     batch_service_client.pool.add(new_pool)
 
 
-def create_job(batch_service_client, job_id, pool_id):
+def create_job(batch_service_client, config):
     """
     Creates a job with the specified ID, associated with the specified pool.
 
@@ -57,29 +57,28 @@ def create_job(batch_service_client, job_id, pool_id):
     :param str job_id: The ID for the job.
     :param str pool_id: The ID for the pool.
     """
-    print("Creating job [{}]...".format(job_id))
+    print("Creating job [{}]...".format(config['JOB_ID']))
 
     job = batch.models.JobAddParameter(
-        id=job_id, pool_info=batch.models.PoolInformation(pool_id=pool_id)
+        id=config['JOB_ID'], pool_info=batch.models.PoolInformation(pool_id=config['POOL_ID'])
     )
 
     batch_service_client.job.add(job)
 
 
-def add_tasks(batch_service_client, job_id, input_files):
+def add_tasks(batch_service_client, input_files, config):
     """
     Adds a task for each input file in the collection to the specified job.
 
     :param batch_service_client: A Batch service client.
     :type batch_service_client: `azure.batch.BatchServiceClient`
-    :param str job_id: The ID of the job to which to add the tasks.
     :param list input_files: A collection of input files. One task will be
      created for each input file.
     :param output_container_sas_token: A SAS token granting write access to
     the specified Azure Blob storage container.
     """
 
-    print("Adding {} tasks to job [{}]...".format(len(input_files), job_id))
+    print("Adding {} tasks to job [{}]...".format(len(input_files), config['JOB_ID']))
 
     tasks = list()
 
@@ -94,10 +93,24 @@ def add_tasks(batch_service_client, job_id, input_files):
             )
         )
 
-    batch_service_client.task.add_collection(job_id, tasks)
+    batch_service_client.task.add_collection(config['JOB_ID'], tasks)
 
 
-def deploy():
+def deploy(pool_id=None, pool_node_count=None, pool_vm_size=None, job_id=None, std_out_fname=None):
+    config = {
+        "POOL_ID": pool_id or "PythonQuickstartPool2",
+        "POOL_NODE_COUNT": pool_node_count or 2,
+        "POOL_VM_SIZE": pool_vm_size or "STANDARD_A1_v2",
+        "JOB_ID": job_id or "PythonQuickstartJob2",
+        "STANDARD_OUT_FILE_NAME": std_out_fname or "stdout.txt",
+
+        "BATCH_ACCOUNT_NAME": os.environ.get("_BATCH_ACCOUNT_NAME"),
+        "BATCH_ACCOUNT_KEY": os.environ.get("_BATCH_ACCOUNT_KEY"),
+        "BATCH_ACCOUNT_URL": os.environ.get("_BATCH_ACCOUNT_URL"),
+        "STORAGE_ACCOUNT_NAME": os.environ.get("_STORAGE_ACCOUNT_NAME"),
+        "STORAGE_ACCOUNT_KEY": os.environ.get("_STORAGE_ACCOUNT_KEY"),
+    }
+
     start_time = datetime.datetime.now().replace(microsecond=0)
     print("Sample start: {}".format(start_time))
     print()
@@ -106,8 +119,8 @@ def deploy():
     # blob storage containers and uploading files to containers.
 
     blob_client = azureblob.BlockBlobService(
-        account_name=os.environ.get("_STORAGE_ACCOUNT_NAME"),
-        account_key=os.environ.get("_STORAGE_ACCOUNT_KEY"),
+        account_name=config["STORAGE_ACCOUNT_NAME"],
+        account_key=config["STORAGE_ACCOUNT_KEY"],
     )
 
     # Use the blob client to create the containers in Azure Storage if they
@@ -132,27 +145,27 @@ def deploy():
     # Create a Batch service client. We'll now be interacting with the Batch
     # service in addition to Storage
     credentials = batch_auth.SharedKeyCredentials(
-        os.environ.get("_BATCH_ACCOUNT_NAME"), os.environ.get("_BATCH_ACCOUNT_KEY")
+        config["BATCH_ACCOUNT_NAME"], config["BATCH_ACCOUNT_KEY"]
     )
 
     batch_client = batch.BatchServiceClient(
-        credentials, batch_url=os.environ.get("_BATCH_ACCOUNT_URL")
+        credentials, batch_url=config["BATCH_ACCOUNT_URL"]
     )
 
     try:
         # Create the pool that will contain the compute nodes that will execute the
         # tasks.
-        create_pool(batch_client, config._POOL_ID)
+        create_pool(batch_client, config)
 
         # Create the job that will run the tasks.
-        create_job(batch_client, config._JOB_ID, config._POOL_ID)
+        create_job(batch_client, config)
 
         # Add the tasks to the job.
-        add_tasks(batch_client, config._JOB_ID, input_files)
+        add_tasks(batch_client, input_files, config)
 
         # Pause execution until tasks reach Completed state.
         wait_for_tasks_to_complete(
-            batch_client, config._JOB_ID, datetime.timedelta(minutes=30)
+            batch_client, config['JOB_ID'], datetime.timedelta(minutes=30)
         )
 
         print(
@@ -161,7 +174,7 @@ def deploy():
         )
 
         # Print the stdout.txt and stderr.txt files for each task to the console
-        print_task_output(batch_client, config._JOB_ID)
+        print_task_output(batch_client, config['JOB_ID'])
 
     except batchmodels.BatchErrorException as err:
         print_batch_exception(err)
@@ -180,15 +193,15 @@ def deploy():
 
     # Clean up Batch resources (if the user so chooses).
     if query_yes_no("Delete job?") == "yes":
-        batch_client.job.delete(config._JOB_ID)
+        batch_client.job.delete(config['JOB_ID'])
 
     if query_yes_no("Delete pool?") == "yes":
-        batch_client.pool.delete(config._POOL_ID)
+        batch_client.pool.delete(config['JOB_ID'])
 
     print()
     input("Press ENTER to exit...")
 
 
 if __name__ == "__main__":
-    print(os.environ.get("_BATCH_ACCOUNT_NAME"))
+    # print(os.environ.get("_BATCH_ACCOUNT_NAME"))
     deploy()
