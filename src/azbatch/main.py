@@ -81,7 +81,7 @@ def create_job(batch_service_client, config):
     batch_service_client.job.add(job)
 
 
-def add_tasks(batch_service_client, config):
+def add_tasks(batch_service_client, blob_client, config):
     """
     Adds a task for each input file in the collection to the specified job.
 
@@ -93,9 +93,10 @@ def add_tasks(batch_service_client, config):
     """
     print("Adding tasks to job [{}]...".format(config['JOB_ID']))
 
+    # Set up container
     task_container_settings = batchmodels.TaskContainerSettings(
         image_name=NEO_IMAGE,
-        container_run_options='--rm --workdir /ada_tools'
+        container_run_options='--rm --workdir /ada_tools'  #  --gpus all
     )
     admin_identity = batchmodels.UserIdentity(
         auto_user=batchmodels.AutoUserSpecification(
@@ -104,41 +105,75 @@ def add_tasks(batch_service_client, config):
         )
     )
 
+    # Set up blob client
+    input_container_name = 'adafiles'
+    blob_client.create_container(input_container_name, fail_on_exist=False)
+    container_sas_token = blob_client.generate_container_shared_access_signature(
+        input_container_name,
+        permission=azureblob.BlobPermissions.WRITE,
+        expiry=datetime.datetime.utcnow() + datetime.timedelta(days=1))
+    container_url = blob_client.make_container_url(input_container_name, sas_token=container_sas_token)
+    output_file_dest = batchmodels.OutputFileBlobContainerDestination(container_url=container_url)
+    upload_opts = batchmodels.OutputFileUploadOptions(
+        upload_condition=batchmodels.OutputFileUploadCondition.task_success
+    )
     tasks = [
         batchmodels.TaskAddParameter(
-            id='00-info',
-            command_line="neo info",
+            id='001-create-file',
+            command_line="touch /test.txt",
             container_settings=task_container_settings,
             user_identity=admin_identity,
+            # output_files=[batchmodels.OutputFile(file_pattern="/*.txt",
+            #                                      destination=output_file_dest,
+            #                                      upload_options=upload_opts)]
         ),
-        batchmodels.TaskAddParameter(
-            id='01-load-images',
-            command_line="load-images --dest /ada --maxpre 1 --maxpost 1",
-            container_settings=task_container_settings,
-            user_identity=admin_identity,
-        ),
-        batchmodels.TaskAddParameter(
-            id='02-check-images',
-            command_line="ls /ada",
-            container_settings=task_container_settings,
-            user_identity=admin_identity,
-        ),
+        # batchmodels.TaskAddParameter(
+        #     id='002-check-file',
+        #     command_line="cat /test.txt",
+        #     container_settings=task_container_settings,
+        #     user_identity=admin_identity,
+        #     resource_files=[batchmodels.ResourceFile(storage_container_url=container_url)],
+        #     # output_files=[batchmodels.OutputFile(file_pattern="/*.txt",
+        #     #                                      destination=output_file_dest)]
+        # ),
+
+        # batchmodels.TaskAddParameter(
+        #     id='00-info',
+        #     command_line="neo info",
+        #     container_settings=task_container_settings,
+        #     user_identity=admin_identity,
+        # ),
+        # batchmodels.TaskAddParameter(
+        #     id='01-load-images',
+        #     command_line="load-images --dest /ada --maxpre 1 --maxpost 1",
+        #     container_settings=task_container_settings,
+        #     user_identity=admin_identity,
+        # ),
+        # batchmodels.TaskAddParameter(
+        #     id='02-check-images',
+        #     command_line="ls /ada",
+        #     container_settings=task_container_settings,
+        #     user_identity=admin_identity,
+        # ),
     ]
     batch_service_client.task.add_collection(config['JOB_ID'], tasks)
 
 
 @click.command()
-@click.argument("pool-id")
+@click.option("--pool-id", "-p")
 @click.option("--job-id", "-j")
 @click.option("--pool-node-count")
 @click.option("--pool-vm-size")
 @click.option("--std-out-fname")
 def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, std_out_fname=None):
+    start_time = datetime.datetime.now().replace(microsecond=0)
+    print("Sample start: {}".format(start_time))
+
     config = {
-        "POOL_ID": pool_id or "PythonQuickstartPool2",
-        "JOB_ID": job_id or "PythonQuickstartJob2",
+        "POOL_ID": pool_id or f"pool_{start_time.strftime('%Y%m%d%H%M%S')}",
+        "JOB_ID": job_id or f"job_{start_time.strftime('%Y%m%d%H%M%S')}",
         "POOL_NODE_COUNT": pool_node_count or 1,
-        "POOL_VM_SIZE": pool_vm_size or "STANDARD_D1_V2",
+        "POOL_VM_SIZE": pool_vm_size or "Standard_NC6",  # "STANDARD_D1_V2",
         "STANDARD_OUT_FILE_NAME": std_out_fname or "stdout.txt",
 
         "BATCH_ACCOUNT_NAME": os.environ.get("_BATCH_ACCOUNT_NAME"),
@@ -148,10 +183,6 @@ def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, s
         "STORAGE_ACCOUNT_KEY": os.environ.get("_STORAGE_ACCOUNT_KEY"),
         "CR_PASSWORD": os.environ.get("_CR_PASSWORD"),
     }
-    print(config['BATCH_ACCOUNT_NAME'])
-    start_time = datetime.datetime.now().replace(microsecond=0)
-    print("Sample start: {}".format(start_time))
-    print()
 
     # Create a Batch service client. We'll now be interacting with the Batch
     # service in addition to Storage
@@ -160,6 +191,11 @@ def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, s
     )
     batch_client = batch.BatchServiceClient(
         credentials, batch_url=config["BATCH_ACCOUNT_URL"]
+    )
+
+    blob_client = azureblob.BlockBlobService(
+        account_name=config["STORAGE_ACCOUNT_NAME"],
+        account_key=config["STORAGE_ACCOUNT_KEY"]
     )
 
     try:
@@ -171,7 +207,7 @@ def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, s
         create_job(batch_client, config)
 
         # Add the tasks to the job.
-        add_tasks(batch_client, config)
+        add_tasks(batch_client, blob_client, config)
 
         # Pause execution until tasks reach Completed state.
         wait_for_tasks_to_complete(
