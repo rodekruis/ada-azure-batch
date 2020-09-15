@@ -120,12 +120,13 @@ def add_tasks(batch_service_client, blob_client, config):
     tasks = [
         batchmodels.TaskAddParameter(
             id='001-create-file',
-            command_line="touch /test.txt",
+            command_line="touch $AZ_BATCH_TASK_WORKING_DIR/test.txt",
             container_settings=task_container_settings,
             user_identity=admin_identity,
-            # output_files=[batchmodels.OutputFile(file_pattern="/*.txt",
-            #                                      destination=output_file_dest,
-            #                                      upload_options=upload_opts)]
+            output_files=[batchmodels.OutputFile(file_pattern="**/*.txt",
+                                                 destination=batchmodels.OutputFileDestination(
+                container=output_file_dest),
+                                                 upload_options=upload_opts)]
         ),
         # batchmodels.TaskAddParameter(
         #     id='002-check-file',
@@ -201,7 +202,7 @@ def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, s
     try:
         # Create the pool that will contain the compute nodes that will execute the
         # tasks.
-        create_pool(batch_client, config)
+        # create_pool(batch_client, config)
 
         # Create the job that will run the tasks.
         create_job(batch_client, config)
@@ -238,7 +239,7 @@ def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, s
         batch_client.job.delete(config['JOB_ID'])
 
     if query_yes_no("Delete pool?") == "yes":
-        batch_client.pool.delete(config['JOB_ID'])
+        batch_client.pool.delete(config['POOL_ID'])
 
     print()
     input("Press ENTER to exit...")
