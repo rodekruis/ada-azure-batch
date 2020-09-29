@@ -1,30 +1,31 @@
 # ADA Azure Batch
+Tools for deployment of Automated Damage Assessment tools by 510 on Azure Batch [wip].
+
+Parallelizing existing pipeline (https://github.com/jmargutt/ADA_tools) via a dockerized
+app (currently at https://github.com/ondrejzacha/neat-eo-fork) run on Azure Batch.
+
+## Dependencies
+This project *depends* on a docker image built via https://github.com/ondrejzacha/neat-eo-fork
+and pushed to the Azure container registry `ada510.azurecr.io`.
+
+## Manual work required
+The following environment variables should be set manually (easily via a `.env` file):
+
+Batch account information:
+- `_BATCH_ACCOUNT_NAME`,
+- `_BATCH_ACCOUNT_KEY`,
+- `_BATCH_ACCOUNT_URL`,
+
+Connection strings for `510datalakestorage` and `xcctest` blob storage accounts:
+- `_510_DLS_CONNECTION_STRING`,
+- `_XCCTEST_CONNECTION_STRING`,
+
+Azure Container registry password for the `ada510.azurecr.io` registry server and user `ada510`:
+
+- `_CR_PASSWORD`.
+
+
+## Notes
+This project is work in progress!
 
 Adapted from https://github.com/Azure-Samples/batch-python-quickstart
-
-## Big todos
-- refactor
-- add remaining tasks
-- use azure storage
-- custom VM (with nvidia drivers + cuda)
-
-## Usage
-Deploy:
-```
-Usage: deploy-batch [OPTIONS] POOL_ID
-
-Options:
-  -j, --job-id TEXT
-  --pool-node-count TEXT
-  --pool-vm-size TEXT
-  --std-out-fname TEXT
-  --help                  Show this message and exit.
-```
-
-With the following environment variables:
-`_BATCH_ACCOUNT_NAME`,
-`_BATCH_ACCOUNT_KEY`,
-`_BATCH_ACCOUNT_URL`,
-`_STORAGE_ACCOUNT_NAME`,
-`_STORAGE_ACCOUNT_KEY`,
-`_CR_PASSWORD`.

@@ -1,43 +1,20 @@
 import datetime
-import os
-import sys
+from typing import Dict, List, Optional
 
-import azure.storage.blob as azureblob
 import azure.batch.batch_service_client as batch
-import azure.batch.batch_auth as batch_auth
 import azure.batch.models as batchmodels
-
-import click
-
-from azbatch.utils import query_yes_no, print_batch_exception, wait_for_tasks_to_complete, print_task_output, \
-    upload_file_to_container
+import azure.storage.blob as azureblob
 
 NEO_IMAGE = "ada510.azurecr.io/neo:merged-python"
-# NEO_IMAGE = "ada510.azurecr.io/neo:nvidia"  # doesn't help
 
 
-def create_container_config(config):
-    ada_cr = batchmodels.ContainerRegistry(
-        registry_server="ada510.azurecr.io",
-        user_name="ada510",
-        password=config["CR_PASSWORD"],
-    )
-    return batchmodels.ContainerConfiguration(
-        container_image_names=[NEO_IMAGE],
-        container_registries=[ada_cr],
-    )
-
-
-def create_pool(batch_service_client, config):
+def create_pool(batch_service_client: batch.BatchServiceClient, config: Dict[str, str]) -> None:
     """
     Creates a pool of compute nodes with the specified OS settings.
 
     :param batch_service_client: A Batch service client.
     :type batch_service_client: `azure.batch.BatchServiceClient`
-    :param str pool_id: An ID for the new pool.
-    :param str publisher: Marketplace image publisher
-    :param str offer: Marketplace image offer
-    :param str sku: Marketplace image sku
+    :param config: Configuration
     """
     print("Creating pool [{}]...".format(config['POOL_ID']))
 
@@ -64,14 +41,13 @@ def create_pool(batch_service_client, config):
     batch_service_client.pool.add(new_pool)
 
 
-def create_job(batch_service_client, config):
+def create_job(batch_service_client: batch.BatchServiceClient, config: Dict[str, str]) -> None:
     """
     Creates a job with the specified ID, associated with the specified pool.
 
     :param batch_service_client: A Batch service client.
     :type batch_service_client: `azure.batch.BatchServiceClient`
-    :param str job_id: The ID for the job.
-    :param str pool_id: The ID for the pool.
+    :param config: Config
     """
     print("Creating job [{}]...".format(config['JOB_ID']))
 
@@ -81,133 +57,57 @@ def create_job(batch_service_client, config):
     batch_service_client.job.add(job)
 
 
-def add_tasks(batch_service_client, config):
+def create_container_config(config: Dict[str, str]) -> batchmodels.ContainerConfiguration:
+    ada_cr = batchmodels.ContainerRegistry(
+        registry_server="ada510.azurecr.io",
+        user_name="ada510",
+        password=config["CR_PASSWORD"],
+    )
+    return batchmodels.ContainerConfiguration(
+        container_image_names=[NEO_IMAGE],
+        container_registries=[ada_cr],
+    )
+
+
+def create_sas_token(
+        blob_client: azureblob.BlockBlobService,
+        container_name: str,
+        permissions: Optional[List[str]] = None,
+        expire_in: Optional[datetime.timedelta] = None,
+) -> str:
     """
-    Adds a task for each input file in the collection to the specified job.
-
-    :param batch_service_client: A Batch service client.
-    :type batch_service_client: `azure.batch.BatchServiceClient`
-    :param list input_files: A collection of input files. One task will be
-     created for each input file.
-    :param config: Config
+    Create SAS token
+    :param blob_client: Blob client
+    :param container_name: Storage container name
+    :param permissions: list of required permissions (available: "read", "list", "write", "delete")
+    :param expire_in: In how long should the token expire (datetime.timedelta, default = 1 day)
+    :return: SAS token, str
     """
-    print("Adding tasks to job [{}]...".format(config['JOB_ID']))
+    permissions = permissions or ["read"]
+    expire_in = expire_in or datetime.timedelta(days=1)
 
-    task_container_settings = batchmodels.TaskContainerSettings(
-        image_name=NEO_IMAGE,
-        container_run_options='--rm --workdir /ada_tools'
-    )
-    admin_identity = batchmodels.UserIdentity(
-        auto_user=batchmodels.AutoUserSpecification(
-            scope='pool',
-            elevation_level='admin',
-        )
+    return blob_client.generate_container_shared_access_signature(
+        container_name=container_name,
+        permission=azureblob.ContainerPermissions(**{opt: True for opt in permissions}),
+        expiry=datetime.datetime.utcnow() + expire_in
     )
 
-    tasks = [
-        batchmodels.TaskAddParameter(
-            id='00-info',
-            command_line="neo info",
-            container_settings=task_container_settings,
-            user_identity=admin_identity,
-        ),
-        batchmodels.TaskAddParameter(
-            id='01-load-images',
-            command_line="load-images --dest /ada --maxpre 1 --maxpost 1",
-            container_settings=task_container_settings,
-            user_identity=admin_identity,
-        ),
-        batchmodels.TaskAddParameter(
-            id='02-check-images',
-            command_line="ls /ada",
-            container_settings=task_container_settings,
-            user_identity=admin_identity,
-        ),
-    ]
-    batch_service_client.task.add_collection(config['JOB_ID'], tasks)
 
+def create_resource_url(
+        storage_account_name: str,
+        container_name: str,
+        sas_token: str,
+        container_path: Optional[str] = None,
+) -> str:
+    """
+    Create resource URL
 
-@click.command()
-@click.argument("pool-id")
-@click.option("--job-id", "-j")
-@click.option("--pool-node-count")
-@click.option("--pool-vm-size")
-@click.option("--std-out-fname")
-def deploy(pool_id=None, job_id=None, pool_node_count=None, pool_vm_size=None, std_out_fname=None):
-    config = {
-        "POOL_ID": pool_id or "PythonQuickstartPool2",
-        "JOB_ID": job_id or "PythonQuickstartJob2",
-        "POOL_NODE_COUNT": pool_node_count or 1,
-        "POOL_VM_SIZE": pool_vm_size or "STANDARD_D1_V2",
-        "STANDARD_OUT_FILE_NAME": std_out_fname or "stdout.txt",
-
-        "BATCH_ACCOUNT_NAME": os.environ.get("_BATCH_ACCOUNT_NAME"),
-        "BATCH_ACCOUNT_KEY": os.environ.get("_BATCH_ACCOUNT_KEY"),
-        "BATCH_ACCOUNT_URL": os.environ.get("_BATCH_ACCOUNT_URL"),
-        "STORAGE_ACCOUNT_NAME": os.environ.get("_STORAGE_ACCOUNT_NAME"),
-        "STORAGE_ACCOUNT_KEY": os.environ.get("_STORAGE_ACCOUNT_KEY"),
-        "CR_PASSWORD": os.environ.get("_CR_PASSWORD"),
-    }
-    print(config['BATCH_ACCOUNT_NAME'])
-    start_time = datetime.datetime.now().replace(microsecond=0)
-    print("Sample start: {}".format(start_time))
-    print()
-
-    # Create a Batch service client. We'll now be interacting with the Batch
-    # service in addition to Storage
-    credentials = batch_auth.SharedKeyCredentials(
-        config["BATCH_ACCOUNT_NAME"], config["BATCH_ACCOUNT_KEY"]
-    )
-    batch_client = batch.BatchServiceClient(
-        credentials, batch_url=config["BATCH_ACCOUNT_URL"]
-    )
-
-    try:
-        # Create the pool that will contain the compute nodes that will execute the
-        # tasks.
-        create_pool(batch_client, config)
-
-        # Create the job that will run the tasks.
-        create_job(batch_client, config)
-
-        # Add the tasks to the job.
-        add_tasks(batch_client, config)
-
-        # Pause execution until tasks reach Completed state.
-        wait_for_tasks_to_complete(
-            batch_client, config['JOB_ID'], datetime.timedelta(minutes=30)
-        )
-
-        print(
-            "  Success! All tasks reached the 'Completed' state within the "
-            "specified timeout period."
-        )
-
-        # Print the stdout.txt and stderr.txt files for each task to the console
-        print_task_output(batch_client, config['JOB_ID'], config['STANDARD_OUT_FILE_NAME'])
-
-    except batchmodels.BatchErrorException as err:
-        print_batch_exception(err)
-        raise
-
-    # Print out some timing info
-    end_time = datetime.datetime.now().replace(microsecond=0)
-    print()
-    print("Sample end: {}".format(end_time))
-    print("Elapsed time: {}".format(end_time - start_time))
-    print()
-
-    # Clean up Batch resources (if the user so chooses).
-    if query_yes_no("Delete job?") == "yes":
-        batch_client.job.delete(config['JOB_ID'])
-
-    if query_yes_no("Delete pool?") == "yes":
-        batch_client.pool.delete(config['JOB_ID'])
-
-    print()
-    input("Press ENTER to exit...")
-
-
-if __name__ == "__main__":
-    # print(os.environ.get("_BATCH_ACCOUNT_NAME"))
-    deploy()
+    :param storage_account_name: Storage account name
+    :param container_name: Storage container name
+    :param sas_token: SAS token
+    :param container_path: path to file inside container; optional -- default: empty path = path to container
+    :return: Resource URL, str
+    """
+    container_path = container_path or ""
+    storage_path = f"{container_name}/{container_path}".replace("//", "/")
+    return f"https://{storage_account_name}.blob.core.windows.net/{storage_path}?{sas_token}"
