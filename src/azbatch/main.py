@@ -75,6 +75,14 @@ def create_sas_token(
         permissions: Optional[List[str]] = None,
         expire_in: Optional[datetime.timedelta] = None,
 ) -> str:
+    """
+    Create SAS token
+    :param blob_client: Blob client
+    :param container_name: Storage container name
+    :param permissions: list of required permissions (available: "read", "list", "write", "delete")
+    :param expire_in: In how long should the token expire (datetime.timedelta, default = 1 day)
+    :return: SAS token, str
+    """
     permissions = permissions or ["read"]
     expire_in = expire_in or datetime.timedelta(days=1)
 
@@ -91,6 +99,15 @@ def create_resource_url(
         sas_token: str,
         container_path: Optional[str] = None,
 ) -> str:
+    """
+    Create resource URL
+
+    :param storage_account_name: Storage account name
+    :param container_name: Storage container name
+    :param sas_token: SAS token
+    :param container_path: path to file inside container; optional -- default: empty path = path to container
+    :return: Resource URL, str
+    """
     container_path = container_path or ""
     storage_path = f"{container_name}/{container_path}".replace("//", "/")
     return f"https://{storage_account_name}.blob.core.windows.net/{storage_path}?{sas_token}"
