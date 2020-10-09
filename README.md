@@ -26,6 +26,7 @@ Azure Container registry password for the `ada510.azurecr.io` registry server an
 
 
 ## Notes
-This project is work in progress!
+This project is work in progress! For a document that can be useful for further 
+development, see [NOTES.md](NOTES.md)
 
 Adapted from https://github.com/Azure-Samples/batch-python-quickstart
