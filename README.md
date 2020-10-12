@@ -2,10 +2,10 @@
 Tools for deployment of Automated Damage Assessment tools by 510 on Azure Batch [wip].
 
 Parallelizing existing pipeline (https://github.com/jmargutt/ADA_tools) via a dockerized
-app (currently at https://github.com/ondrejzacha/neat-eo-fork) run on Azure Batch.
+app (currently at https://github.com/ondrejzacha/ada-collection) run on Azure Batch.
 
 ## Dependencies
-This project *depends* on a docker image built via https://github.com/ondrejzacha/neat-eo-fork
+This project *depends* on a docker image built via https://github.com/ondrejzacha/ada-collection
 and pushed to the Azure container registry `ada510.azurecr.io`.
 
 ## Manual work required
