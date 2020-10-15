@@ -52,7 +52,9 @@ def create_job(batch_service_client: batch.BatchServiceClient, config: Dict[str,
     print("Creating job [{}]...".format(config['JOB_ID']))
 
     job = batch.models.JobAddParameter(
-        id=config['JOB_ID'], pool_info=batch.models.PoolInformation(pool_id=config['POOL_ID'])
+        id=config['JOB_ID'],
+        pool_info=batch.models.PoolInformation(pool_id=config['POOL_ID']),
+        uses_task_dependencies=True
     )
     batch_service_client.job.add(job)
 
