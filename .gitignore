@@ -10,6 +10,7 @@
 *.sln.docstates
 *.ipynb_checkpoints
 *.env
+*.json
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
