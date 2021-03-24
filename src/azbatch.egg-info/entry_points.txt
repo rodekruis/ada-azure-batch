@@ -1,0 +1,3 @@
+[console_scripts]
+deploy-batch = azbatch.main:deploy
+

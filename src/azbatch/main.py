@@ -1,7 +1,7 @@
 import datetime
 from typing import Dict, List, Optional
 
-import azure.batch.batch_service_client as batch
+import azure.batch._batch_service_client as batch
 import azure.batch.models as batchmodels
 import azure.storage.blob as azureblob
 
@@ -37,6 +37,7 @@ def create_pool(batch_service_client: batch.BatchServiceClient, config: Dict[str
         ),
         vm_size=config['POOL_VM_SIZE'],
         target_dedicated_nodes=config['POOL_NODE_COUNT'],
+        task_slots_per_node=config['TASK_SLOTS_PER_NODE'],
     )
     batch_service_client.pool.add(new_pool)
 
