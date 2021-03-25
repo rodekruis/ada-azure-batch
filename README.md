@@ -1,11 +1,11 @@
 # ADA Azure Batch
 Tools for deployment of Automated Damage Assessment tools by 510 on Azure Batch [wip].
 
-Parallelizing existing pipeline (https://github.com/jmargutt/ADA_tools) via a dockerized
-app (currently at https://github.com/ondrejzacha/ada-collection) run on Azure Batch.
+Parallelizing existing pipeline (https://github.com/rodekruis/ada-collection) via a dockerized
+app (ada510.azurecr.io/ada:latest) run on Azure Batch.
 
 ## Dependencies
-This project *depends* on a docker image built via https://github.com/ondrejzacha/ada-collection
+This project *depends* on a docker image built via https://github.com/rodekruis/ada-collection
 and pushed to the Azure container registry `ada510.azurecr.io`.
 
 ## Manual work required
