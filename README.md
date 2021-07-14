@@ -22,6 +22,8 @@ and pushed to the Azure container registry `ada510.azurecr.io`.
 3. Each node will produce an output in a different directory named according to index; merge all outputs using (from [ada-collection](https://github.com/rodekruis/ada-collection/blob/master/ada_tools/src/ada_tools/merge_output.py)
 `merge-output --dir adafiles/ --dest adafiles/<disaster-name>`
 
+NOTE: Azure batch jobs can be monitored from [here](https://portal.azure.com/#@rodekruis.nl/resource/subscriptions/b2d243bd-7fab-4a8a-8261-a725ee0e3b47/resourceGroups/510Global-ADA/providers/Microsoft.Batch/batchAccounts/510adagpu/accountJobs). Jobs will fail at task 'prepare-data' if no buildings were previously detected (to be fixed). 
+
 ## Credentials
 The following environment variables should be set in the `.env` file:
 
