@@ -1,5 +1,5 @@
 # ADA Azure Batch
-Tools for deployment of Automated Damage Assessment tools by 510 on Azure Batch [wip].
+Tools for deployment of Automated Damage Assessment tools by 510 on Azure Batch.
 
 Parallelizing existing pipeline (https://github.com/rodekruis/ada-collection) via a dockerized
 app (ada510.azurecr.io/ada:latest) run on Azure Batch.
