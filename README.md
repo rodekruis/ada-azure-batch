@@ -21,7 +21,7 @@ create-index --data adafiles/<disaster-name> --dest adafiles/<disaster-name>/til
 9. Copy credentials from BitWarden ("ada-azure-batch .env") and save them in
   `notebooks/`
 2. Run the notebook `notebooks/neo-batch.ipynb`
-4. N.B. Double-check that [all pools](https://portal.azure.com/#@rodekruis.nl/resource/subscriptions/b2d243bd-7fab-4a8a-8261-a725ee0e3b47/resourceGroups/510Global-ADA/providers/Microsoft.Batch/batchAccounts/510adagpu/accountPools) are actually deleted
+4. When tasks are completed, double-check that [all pools](https://portal.azure.com/#@rodekruis.nl/resource/subscriptions/b2d243bd-7fab-4a8a-8261-a725ee0e3b47/resourceGroups/510Global-ADA/providers/Microsoft.Batch/batchAccounts/510adagpu/accountPools) are actually deleted.
 3. Each node will produce an output in a different directory named according to index; merge all outputs using (from [ada-collection](https://github.com/rodekruis/ada-collection/blob/master/ada_tools/src/ada_tools/merge_output.py))
 ```
 merge-output --dir adafiles/ --dest adafiles/<disaster-name>
