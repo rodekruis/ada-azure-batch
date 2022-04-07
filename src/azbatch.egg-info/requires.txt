@@ -1,8 +1,0 @@
-azure-batch==10.0.0
-azure-storage-blob==1.4.0
-python-dotenv==0.14.0
-
-[dev]
-jupyterlab
-mypy
-flake8

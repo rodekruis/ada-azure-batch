@@ -4,6 +4,8 @@ from typing import Dict, List, Optional
 import azure.batch._batch_service_client as batch
 import azure.batch.models as batchmodels
 import azure.storage.blob as azureblob
+from azure.storage.blob._shared_access_signature import generate_container_sas
+from azure.storage.blob._models import ContainerSasPermissions
 
 NEO_IMAGE = "ada510.azurecr.io/neo:merged-python"
 
@@ -27,17 +29,17 @@ def create_pool(batch_service_client: batch.BatchServiceClient, config: Dict[str
         id=config['POOL_ID'],
         virtual_machine_configuration=batchmodels.VirtualMachineConfiguration(
             image_reference=batchmodels.ImageReference(
-                publisher="microsoft-azure-batch",
                 offer="ubuntu-server-container",
-                sku='16-04-lts',
+                publisher="microsoft-azure-batch",
+                sku='20-04-lts',
                 version="latest",
             ),
-            node_agent_sku_id="batch.node.ubuntu 16.04",
+            node_agent_sku_id="batch.node.ubuntu 20.04",
             container_configuration=create_container_config(config),
         ),
         vm_size=config['POOL_VM_SIZE'],
         target_dedicated_nodes=config['POOL_NODE_COUNT'],
-        task_slots_per_node=config['TASK_SLOTS_PER_NODE'],
+        task_slots_per_node=config['TASK_SLOTS_PER_NODE']
     )
     batch_service_client.pool.add(new_pool)
 
@@ -73,7 +75,8 @@ def create_container_config(config: Dict[str, str]) -> batchmodels.ContainerConf
 
 
 def create_sas_token(
-        blob_client: azureblob.BlockBlobService,
+        storage_account_name: str,
+        storage_account_key: str,
         container_name: str,
         permissions: Optional[List[str]] = None,
         expire_in: Optional[datetime.timedelta] = None,
@@ -89,11 +92,36 @@ def create_sas_token(
     permissions = permissions or ["read"]
     expire_in = expire_in or datetime.timedelta(days=1)
 
-    return blob_client.generate_container_shared_access_signature(
+    return generate_container_sas(
+        account_name=storage_account_name,
+        account_key=storage_account_key,
         container_name=container_name,
-        permission=azureblob.ContainerPermissions(**{opt: True for opt in permissions}),
+        permission=ContainerSasPermissions(**{opt: True for opt in permissions}),
         expiry=datetime.datetime.utcnow() + expire_in
     )
+
+# def create_sas_token(
+#             blob_client: azureblob.BlockBlobService,
+#             container_name: str,
+#             permissions: Optional[List[str]] = None,
+#             expire_in: Optional[datetime.timedelta] = None,
+#     ) -> str:
+#         """
+#         Create SAS token
+#         :param blob_client: Blob client
+#         :param container_name: Storage container name
+#         :param permissions: list of required permissions (available: "read", "list", "write", "delete")
+#         :param expire_in: In how long should the token expire (datetime.timedelta, default = 1 day)
+#         :return: SAS token, str
+#         """
+#         permissions = permissions or ["read"]
+#         expire_in = expire_in or datetime.timedelta(days=1)
+#
+#         return blob_client.generate_container_shared_access_signature(
+#             container_name=container_name,
+#             permission=azureblob.ContainerPermissions(**{opt: True for opt in permissions}),
+#             expiry=datetime.datetime.utcnow() + expire_in
+#         )
 
 
 def create_resource_url(
